@@ -1,0 +1,49 @@
+# Git
+.git
+.gitignore
+
+# Documentation
+*.md
+DEPLOYMENT.md
+QUICKSTART.md
+
+# Environment files
+.env
+.env.*
+!.env.example
+!.env.production.example
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs
+*.log
+
+# Dependencies (will be installed in container)
+node_modules
+
+# Build outputs (will be built in container)
+dist
+build
+
+# Testing
+coverage
+.nyc_output
+
+# Temporary files
+tmp
+temp
+
+# Scripts (not needed in container)
+scripts
+
+# Kiro specs
+.kiro
