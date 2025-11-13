@@ -1,6 +1,8 @@
 import axios, { AxiosError } from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+// VITE_API_URL은 'http://localhost:5000'과 같은 순수 서버 주소여야 합니다.
+// '/api' 접두사는 여기서 추가합니다.
+const API_BASE_URL = `${import.meta.env.VITE_API_URL}/api`;
 
 // Create axios instance
 const api = axios.create({

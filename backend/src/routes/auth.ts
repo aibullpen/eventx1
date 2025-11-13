@@ -2,13 +2,13 @@ import { Router, Request, Response } from 'express';
 import { AuthenticationService } from '../services/AuthenticationService';
 
 const router = Router();
-const authService = new AuthenticationService();
 
 /**
  * POST /api/auth/google
  * Initiate Google OAuth flow
  */
 router.post('/google', (req: Request, res: Response) => {
+  const authService = AuthenticationService.getInstance();
   try {
     const authUrl = authService.initiateGoogleAuth();
     res.json({ authUrl });
@@ -36,6 +36,7 @@ router.get('/google/callback', async (req: Request, res: Response) => {
   }
 
   try {
+    const authService = AuthenticationService.getInstance();
     const userSession = await authService.handleGoogleCallback(code);
 
     // Store user session
@@ -64,6 +65,7 @@ router.get('/google/callback', async (req: Request, res: Response) => {
  * Get current authenticated user
  */
 router.get('/me', (req: Request, res: Response) => {
+  const authService = AuthenticationService.getInstance();
   if (req.session && (req.session as any).userId) {
     const userId = (req.session as any).userId;
     const user = authService.getUserById(userId);

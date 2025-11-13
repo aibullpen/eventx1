@@ -3,10 +3,21 @@ import { GoogleSheetsService } from './GoogleSheetsService';
 import { OAuth2Client } from 'google-auth-library';
 
 export class EventService {
+  private static instance: EventService;
   private events: Map<string, Event> = new Map(); // In-memory storage for now
-  private oauth2Client: OAuth2Client;
+  private oauth2Client: OAuth2Client | null = null;
 
-  constructor(oauth2Client: OAuth2Client) {
+  private constructor() {}
+
+  public static getInstance(): EventService {
+    if (!EventService.instance) {
+      EventService.instance = new EventService();
+    }
+    return EventService.instance;
+  }
+
+  // OAuth2Client를 외부에서 주입받도록 변경
+  public setOAuth2Client(oauth2Client: OAuth2Client) {
     this.oauth2Client = oauth2Client;
   }
 
@@ -16,6 +27,10 @@ export class EventService {
    */
   async createEvent(organizerId: string, eventSheetId: string, eventData: EventData): Promise<Event> {
     try {
+      if (!this.oauth2Client) {
+        throw new Error('OAuth2Client is not set in EventService.');
+      }
+
       // Generate unique event ID
       const eventId = `event_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       
@@ -36,7 +51,8 @@ export class EventService {
       this.events.set(eventId, event);
 
       // Store in Google Sheets
-      const sheetsService = new GoogleSheetsService(this.oauth2Client);
+      const sheetsService = GoogleSheetsService.getInstance();
+      sheetsService.setOAuth2Client(this.oauth2Client);
       await sheetsService.storeEvent(eventSheetId, event);
 
       console.log(`Created event ${eventId} for organizer ${organizerId}`);
@@ -65,7 +81,7 @@ export class EventService {
       organizerEvents.sort((a, b) => b.date.getTime() - a.date.getTime());
 
       console.log(`Retrieved ${organizerEvents.length} events for organizer ${organizerId}`);
-      return organizerEvents;
+      return organizerEvents || []; // 항상 배열을 반환하도록 보장합니다.
     } catch (error) {
       console.error('Error getting events by organizer:', error);
       throw new Error('Failed to retrieve events');

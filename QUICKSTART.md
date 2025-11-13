@@ -91,10 +91,10 @@ https://console.cloud.google.com/ 에 접속합니다.
 2. 사용자 유형: "외부" 선택
 3. 앱 정보 입력
 4. 범위 추가:
-   - `userinfo.email`
-   - `userinfo.profile`
+   - `https://www.googleapis.com/auth/userinfo.email`
+   - `https://www.googleapis.com/auth/userinfo.profile`
    - `https://www.googleapis.com/auth/spreadsheets`
-   - `https://www.googleapis.com/auth/forms`
+   - `https://www.googleapis.com/auth/forms.body`
    - `https://www.googleapis.com/auth/gmail.send`
 5. 테스트 사용자에 본인 이메일 추가
 

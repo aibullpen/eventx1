@@ -1,14 +1,11 @@
 import express, { Application } from 'express';
 import session from 'express-session';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import authRoutes from './routes/auth';
 import eventRoutes from './routes/events';
 import attendeeRoutes from './routes/attendees';
 import webhookRoutes from './routes/webhooks';
 
-// Load environment variables
-dotenv.config();
 
 const app: Application = express();
 const PORT = process.env.PORT || 5000;

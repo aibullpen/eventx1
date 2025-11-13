@@ -8,11 +8,10 @@ import { requireAuth } from '../middleware/auth';
 import { EventData } from '../models/Event';
 
 const router = Router();
-const authService = new AuthenticationService();
 
 // Helper function to get OAuth2Client with credentials from session
 const getOAuth2Client = (req: Request) => {
-  const oauth2Client = authService.getOAuth2Client();
+  const oauth2Client = AuthenticationService.getInstance().getOAuth2Client();
   
   // Set credentials from session if available
   if (req.session && (req.session as any).accessToken) {
@@ -27,22 +26,30 @@ const getOAuth2Client = (req: Request) => {
 
 // Helper function to get EventService with OAuth2Client from session
 const getEventService = (req: Request): EventService => {
-  return new EventService(getOAuth2Client(req));
+  const eventService = EventService.getInstance();
+  eventService.setOAuth2Client(getOAuth2Client(req));
+  return eventService;
 };
 
 // Helper function to get AttendeeService with OAuth2Client from session
 const getAttendeeService = (req: Request): AttendeeService => {
-  return new AttendeeService(getOAuth2Client(req));
+  const attendeeService = AttendeeService.getInstance();
+  attendeeService.setOAuth2Client(getOAuth2Client(req));
+  return attendeeService;
 };
 
 // Helper function to get GoogleFormsService with OAuth2Client from session
 const getGoogleFormsService = (req: Request): GoogleFormsService => {
-  return new GoogleFormsService(getOAuth2Client(req));
+  const formsService = GoogleFormsService.getInstance();
+  formsService.setOAuth2Client(getOAuth2Client(req));
+  return formsService;
 };
 
 // Helper function to get EmailService with OAuth2Client from session
 const getEmailService = (req: Request): EmailService => {
-  return new EmailService(getOAuth2Client(req));
+  const emailService = EmailService.getInstance();
+  emailService.setOAuth2Client(getOAuth2Client(req));
+  return emailService;
 };
 
 /**
@@ -53,7 +60,7 @@ const getEmailService = (req: Request): EmailService => {
 router.post('/', requireAuth, async (req: Request, res: Response) => {
   try {
     const userId = (req.session as any).userId;
-    const user = authService.getUserById(userId);
+    const user = AuthenticationService.getInstance().getUserById(userId);
 
     if (!user) {
       return res.status(404).json({
@@ -85,22 +92,8 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
     const eventService = getEventService(req);
     const event = await eventService.createEvent(user.id, user.eventSheetId, eventData);
 
-    res.status(201).json({
-      message: '행사가 생성되었습니다.',
-      event: {
-        id: event.id,
-        organizerId: event.organizerId,
-        name: event.name,
-        location: event.location,
-        description: event.description,
-        instructor: event.instructor,
-        date: event.date,
-        formId: event.formId,
-        formUrl: event.formUrl,
-        createdAt: event.createdAt,
-        updatedAt: event.updatedAt
-      }
-    });
+    // 생성된 이벤트 객체를 바로 반환하여 프론트엔드에서 id를 쉽게 사용하도록 합니다.
+    res.status(201).json(event);
   } catch (error) {
     console.error('Error creating event:', error);
     res.status(500).json({
@@ -118,7 +111,7 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
 router.get('/', requireAuth, async (req: Request, res: Response) => {
   try {
     const userId = (req.session as any).userId;
-    const user = authService.getUserById(userId);
+    const user = AuthenticationService.getInstance().getUserById(userId);
 
     if (!user) {
       return res.status(404).json({
@@ -131,21 +124,7 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
     const eventService = getEventService(req);
     const events = await eventService.getEventsByOrganizer(user.id);
 
-    res.json({
-      events: events.map(event => ({
-        id: event.id,
-        organizerId: event.organizerId,
-        name: event.name,
-        location: event.location,
-        description: event.description,
-        instructor: event.instructor,
-        date: event.date,
-        formId: event.formId,
-        formUrl: event.formUrl,
-        createdAt: event.createdAt,
-        updatedAt: event.updatedAt
-      }))
-    });
+    res.json({ events }); // 이미 올바르게 되어 있다면 변경사항이 없습니다.
   } catch (error) {
     console.error('Error getting events:', error);
     res.status(500).json({
@@ -163,7 +142,7 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
 router.get('/:id', requireAuth, async (req: Request, res: Response) => {
   try {
     const userId = (req.session as any).userId;
-    const user = authService.getUserById(userId);
+    const user = AuthenticationService.getInstance().getUserById(userId);
 
     if (!user) {
       return res.status(404).json({
@@ -226,7 +205,7 @@ router.get('/:id', requireAuth, async (req: Request, res: Response) => {
 router.post('/:id/copy', requireAuth, async (req: Request, res: Response) => {
   try {
     const userId = (req.session as any).userId;
-    const user = authService.getUserById(userId);
+    const user = AuthenticationService.getInstance().getUserById(userId);
 
     if (!user) {
       return res.status(404).json({
@@ -306,7 +285,7 @@ router.post('/:id/copy', requireAuth, async (req: Request, res: Response) => {
 router.post('/:id/send-invitations', requireAuth, async (req: Request, res: Response) => {
   try {
     const userId = (req.session as any).userId;
-    const user = authService.getUserById(userId);
+    const user = AuthenticationService.getInstance().getUserById(userId);
 
     if (!user) {
       return res.status(404).json({

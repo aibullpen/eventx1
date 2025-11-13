@@ -1,13 +1,23 @@
 import { Attendee, AttendanceStatus } from '../models/Attendee';
 import { GoogleSheetsService } from './GoogleSheetsService';
 import { OAuth2Client } from 'google-auth-library';
-import * as XLSX from 'xlsx';
+import * as ExcelJS from 'exceljs';
 
 export class AttendeeService {
+  private static instance: AttendeeService;
   private attendees: Map<string, Attendee> = new Map(); // In-memory storage
-  private oauth2Client: OAuth2Client;
+  private oauth2Client: OAuth2Client | null = null;
 
-  constructor(oauth2Client: OAuth2Client) {
+  private constructor() {}
+
+  public static getInstance(): AttendeeService {
+    if (!AttendeeService.instance) {
+      AttendeeService.instance = new AttendeeService();
+    }
+    return AttendeeService.instance;
+  }
+
+  public setOAuth2Client(oauth2Client: OAuth2Client) {
     this.oauth2Client = oauth2Client;
   }
 
@@ -17,6 +27,10 @@ export class AttendeeService {
    */
   async addAttendee(eventId: string, eventSheetId: string, email: string): Promise<Attendee> {
     try {
+      if (!this.oauth2Client) {
+        throw new Error('OAuth2Client is not set in AttendeeService.');
+      }
+
       // Validate email format
       if (!this.isValidEmail(email)) {
         throw new Error('Invalid email format');
@@ -45,7 +59,8 @@ export class AttendeeService {
       this.attendees.set(attendeeId, attendee);
 
       // Store in Google Sheets
-      const sheetsService = new GoogleSheetsService(this.oauth2Client);
+      const sheetsService = GoogleSheetsService.getInstance();
+      sheetsService.setOAuth2Client(this.oauth2Client);
       await sheetsService.storeAttendees(eventSheetId, eventId, [attendee]);
 
       console.log(`Added attendee ${attendeeId} to event ${eventId}`);
@@ -88,26 +103,44 @@ export class AttendeeService {
   async updateAttendanceStatus(
     attendeeId: string,
     eventSheetId: string,
-    status: AttendanceStatus
+    status: AttendanceStatus,
+    name?: string,
+    responseDate?: Date
   ): Promise<void> {
     try {
+      if (!this.oauth2Client) {
+        throw new Error('OAuth2Client is not set in AttendeeService.');
+      }
+
       const attendee = this.attendees.get(attendeeId);
       
       if (!attendee) {
         throw new Error(`Attendee ${attendeeId} not found`);
       }
 
-      // Update status
+      // Update status, name, and response date
       attendee.attendanceStatus = status;
-      attendee.responseDate = new Date();
+      attendee.name = name || attendee.name; // Update name if provided
+      attendee.responseDate = responseDate || new Date();
       attendee.updatedAt = new Date();
 
       // Update in memory
       this.attendees.set(attendeeId, attendee);
 
       // Update in Google Sheets
-      const sheetsService = new GoogleSheetsService(this.oauth2Client);
-      await sheetsService.updateAttendanceStatus(eventSheetId, attendeeId, status);
+      const sheetsService = GoogleSheetsService.getInstance();
+      sheetsService.setOAuth2Client(this.oauth2Client);
+
+      // --- [디버깅 로그 추가] ---
+      console.log('--- [GoogleSheetsService.updateAttendanceStatus] 호출 전 파라미터 확인 ---');
+      console.log('1. eventSheetId:', eventSheetId);
+      console.log('2. attendeeId:', attendeeId);
+      console.log('3. status:', status);
+      console.log('4. name:', name);
+      console.log('5. responseDate:', responseDate);
+      console.log('--------------------------------------------------------------------');
+
+      await sheetsService.updateAttendanceStatus(eventSheetId, attendeeId, status, name, responseDate);
 
       console.log(`Updated attendance status for attendee ${attendeeId} to ${status}`);
     } catch (error) {
@@ -122,24 +155,32 @@ export class AttendeeService {
    */
   async addAttendeesFromExcel(eventId: string, eventSheetId: string, fileBuffer: Buffer): Promise<Attendee[]> {
     try {
-      // Parse Excel file
-      const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
+      // Parse Excel file using ExcelJS
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(fileBuffer);
       
-      // Get first sheet
-      const firstSheetName = workbook.SheetNames[0];
-      if (!firstSheetName) {
+      // Get first worksheet
+      const worksheet = workbook.worksheets[0];
+      if (!worksheet) {
         throw new Error('Excel file is empty');
       }
       
-      const worksheet = workbook.Sheets[firstSheetName];
-      
-      // Convert sheet to JSON
-      const data = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-      
       // Extract emails from all cells
-      const emails = this.parseEmailsFromData(data as any[][]);
+      const emails = new Set<string>();
       
-      if (emails.length === 0) {
+      worksheet.eachRow((row) => {
+        row.eachCell((cell) => {
+          const value = cell.value;
+          if (value && typeof value === 'string') {
+            const trimmed = value.trim();
+            if (this.isValidEmail(trimmed)) {
+              emails.add(trimmed.toLowerCase());
+            }
+          }
+        });
+      });
+      
+      if (emails.size === 0) {
         throw new Error('No valid email addresses found in Excel file');
       }
 
@@ -183,7 +224,8 @@ export class AttendeeService {
   async addAttendeesFromSheets(eventId: string, eventSheetId: string, sheetUrl: string): Promise<Attendee[]> {
     try {
       // Read emails from external sheet
-      const sheetsService = new GoogleSheetsService(this.oauth2Client);
+      const sheetsService = GoogleSheetsService.getInstance();
+      sheetsService.setOAuth2Client(this.oauth2Client!);
       const emails = await sheetsService.readAttendeesFromSheet(sheetUrl);
       
       if (emails.length === 0) {
@@ -221,27 +263,6 @@ export class AttendeeService {
       console.error('Error adding attendees from Google Sheets:', error);
       throw error;
     }
-  }
-
-  /**
-   * Parse email addresses from Excel data
-   * Looks for valid email patterns in all cells
-   */
-  private parseEmailsFromData(data: any[][]): string[] {
-    const emails = new Set<string>();
-
-    for (const row of data) {
-      for (const cell of row) {
-        if (cell && typeof cell === 'string') {
-          const trimmed = cell.trim();
-          if (this.isValidEmail(trimmed)) {
-            emails.add(trimmed.toLowerCase());
-          }
-        }
-      }
-    }
-
-    return Array.from(emails);
   }
 
   /**

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { eventService } from '../../services/eventService';
 import { attendeeService } from '../../services/attendeeService';
@@ -26,13 +26,7 @@ export default function EventDetailPage() {
     failures: Array<{ email: string; error: string }>;
   } | null>(null);
 
-  useEffect(() => {
-    if (eventId) {
-      loadEventData();
-    }
-  }, [eventId]);
-
-  const loadEventData = async () => {
+  const loadEventData = useCallback(async () => {
     if (!eventId) return;
 
     try {
@@ -42,15 +36,27 @@ export default function EventDetailPage() {
         eventService.getEvent(eventId),
         attendeeService.getAttendees(eventId),
       ]);
-      setEvent(eventData);
-      setAttendees(attendeesData);
+      
+      // eventData는 { event: {...} } 객체이므로,
+      // 그 안의 event 객체를 상태에 저장해야 합니다.
+      setEvent(eventData.event);
+      
+      // attendeesData는 { count: ..., attendees: [...] } 객체이므로,
+      // 그 안의 attendees 배열을 상태에 저장해야 합니다.
+      setAttendees(attendeesData.attendees || []);
     } catch (err) {
       console.error('Failed to load event data:', err);
       setError('행사 정보를 불러오는데 실패했습니다.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [eventId]);
+
+  useEffect(() => {
+    if (eventId) {
+      loadEventData();
+    }
+  }, [eventId, loadEventData]);
 
   const handleAttendeeSuccess = () => {
     // Reload attendees after successful registration

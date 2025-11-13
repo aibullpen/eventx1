@@ -7,7 +7,6 @@ import { requireAuth } from '../middleware/auth';
 import { AttendanceStatus } from '../models/Attendee';
 
 const router = Router();
-const authService = new AuthenticationService();
 
 // Configure multer for file uploads (memory storage)
 const upload = multer({
@@ -32,31 +31,23 @@ const upload = multer({
 
 // Helper function to get AttendeeService with OAuth2Client from session
 const getAttendeeService = (req: Request): AttendeeService => {
-  const oauth2Client = authService.getOAuth2Client();
+  const oauth2Client = AuthenticationService.getInstance().getOAuth2Client();
   
   // Set credentials from session if available
   if (req.session && (req.session as any).accessToken) {
-    oauth2Client.setCredentials({
-      access_token: (req.session as any).accessToken,
-      refresh_token: (req.session as any).refreshToken
-    });
+    oauth2Client.setCredentials({ access_token: (req.session as any).accessToken, refresh_token: (req.session as any).refreshToken });
   }
-  
-  return new AttendeeService(oauth2Client);
+  const attendeeService = AttendeeService.getInstance();
+  attendeeService.setOAuth2Client(oauth2Client);
+  return attendeeService;
 };
 
 // Helper function to get EventService
 const getEventService = (req: Request): EventService => {
-  const oauth2Client = authService.getOAuth2Client();
-  
-  if (req.session && (req.session as any).accessToken) {
-    oauth2Client.setCredentials({
-      access_token: (req.session as any).accessToken,
-      refresh_token: (req.session as any).refreshToken
-    });
-  }
-  
-  return new EventService(oauth2Client);
+  const oauth2Client = AuthenticationService.getInstance().getOAuth2Client();
+  const eventService = EventService.getInstance();
+  eventService.setOAuth2Client(oauth2Client);
+  return eventService;
 };
 
 /**
@@ -67,7 +58,7 @@ const getEventService = (req: Request): EventService => {
 router.post('/events/:id/attendees', requireAuth, async (req: Request, res: Response) => {
   try {
     const userId = (req.session as any).userId;
-    const user = authService.getUserById(userId);
+    const user = AuthenticationService.getInstance().getUserById(userId);
 
     if (!user) {
       return res.status(404).json({
@@ -148,7 +139,7 @@ router.post('/events/:id/attendees', requireAuth, async (req: Request, res: Resp
 router.post('/events/:id/attendees/from-excel', requireAuth, upload.single('file'), async (req: Request, res: Response) => {
   try {
     const userId = (req.session as any).userId;
-    const user = authService.getUserById(userId);
+    const user = AuthenticationService.getInstance().getUserById(userId);
 
     if (!user) {
       return res.status(404).json({
@@ -232,7 +223,7 @@ router.post('/events/:id/attendees/from-excel', requireAuth, upload.single('file
 router.post('/events/:id/attendees/from-sheets', requireAuth, async (req: Request, res: Response) => {
   try {
     const userId = (req.session as any).userId;
-    const user = authService.getUserById(userId);
+    const user = AuthenticationService.getInstance().getUserById(userId);
 
     if (!user) {
       return res.status(404).json({
@@ -325,7 +316,7 @@ router.post('/events/:id/attendees/from-sheets', requireAuth, async (req: Reques
 router.get('/events/:id/attendees', requireAuth, async (req: Request, res: Response) => {
   try {
     const userId = (req.session as any).userId;
-    const user = authService.getUserById(userId);
+    const user = AuthenticationService.getInstance().getUserById(userId);
 
     if (!user) {
       return res.status(404).json({
@@ -382,7 +373,7 @@ router.get('/events/:id/attendees', requireAuth, async (req: Request, res: Respo
 router.put('/attendees/:id/status', requireAuth, async (req: Request, res: Response) => {
   try {
     const userId = (req.session as any).userId;
-    const user = authService.getUserById(userId);
+    const user = AuthenticationService.getInstance().getUserById(userId);
 
     if (!user) {
       return res.status(404).json({

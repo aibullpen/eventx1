@@ -30,10 +30,18 @@ export default function LoginPage() {
       setLoading(true);
       setError(null);
       const authUrl = await authService.initiateGoogleAuth();
+      if (!authUrl) {
+        throw new Error('인증 URL을 받아오지 못했습니다. 백엔드 서버가 실행 중인지 확인해주세요.');
+      }
       // Redirect to Google OAuth
       window.location.href = authUrl;
     } catch (err) {
-      setError('로그인을 시작할 수 없습니다. 다시 시도해주세요.');
+      let errorMessage = '로그인을 시작할 수 없습니다. 다시 시도해주세요.';
+      if (err instanceof Error) {
+        // err.message에 서버에서 보낸 구체적인 오류가 포함될 수 있습니다.
+        errorMessage = err.message;
+      }
+      setError(errorMessage);
       setLoading(false);
     }
   };

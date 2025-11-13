@@ -19,7 +19,15 @@ export default function EventDashboard() {
     try {
       setLoading(true);
       const data = await eventService.getEvents();
-      setEvents(data);
+
+      // --- [디버깅 로그 추가] ---
+      console.log('프론트엔드: /events API 응답 전체:', data);
+      // --------------------------
+
+      // 백엔드는 { events: [...] } 형태로 응답하므로, data.events 배열을 상태에 저장해야 합니다.
+      // data가 배열이 아니면 data.map()에서 오류가 발생합니다.
+      // data.events가 존재하고 배열인 경우에만 상태를 업데이트합니다.
+      setEvents(data.events || []);
     } catch (err) {
       console.error('Failed to load events:', err);
       showError(err instanceof Error ? err.message : '행사 목록을 불러오는데 실패했습니다.');

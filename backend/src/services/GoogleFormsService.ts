@@ -8,12 +8,22 @@ export interface GoogleForm {
 }
 
 export class GoogleFormsService {
-  private forms: forms_v1.Forms;
-  private oauth2Client: OAuth2Client;
+  private static instance: GoogleFormsService;
+  private forms: forms_v1.Forms | null = null;
+  private oauth2Client: OAuth2Client | null = null;
 
-  constructor(oauth2Client: OAuth2Client) {
+  private constructor() {}
+
+  public static getInstance(): GoogleFormsService {
+    if (!GoogleFormsService.instance) {
+      GoogleFormsService.instance = new GoogleFormsService();
+    }
+    return GoogleFormsService.instance;
+  }
+
+  public setOAuth2Client(oauth2Client: OAuth2Client) {
     this.oauth2Client = oauth2Client;
-    this.forms = google.forms({ version: 'v1', auth: oauth2Client });
+    this.forms = google.forms({ version: 'v1', auth: this.oauth2Client });
   }
 
   /**
@@ -23,6 +33,10 @@ export class GoogleFormsService {
    */
   async createAttendanceForm(event: Event): Promise<GoogleForm> {
     try {
+      if (!this.forms) {
+        throw new Error('GoogleFormsService is not initialized. Call setOAuth2Client first.');
+      }
+
       // Format event date for display
       const eventDate = new Date(event.date);
       const formattedDate = eventDate.toLocaleDateString('ko-KR', {

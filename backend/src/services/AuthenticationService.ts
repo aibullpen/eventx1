@@ -1,17 +1,31 @@
-import { google } from 'googleapis';
 import { User, GoogleProfile, UserSession } from '../models/User';
 import { GoogleSheetsService } from './GoogleSheetsService';
+import { OAuth2Client } from 'google-auth-library';
 
 export class AuthenticationService {
-  private oauth2Client;
+  private static instance: AuthenticationService;
+  private oauth2Client: OAuth2Client;
   private users: Map<string, User> = new Map(); // In-memory storage for now
 
-  constructor() {
-    this.oauth2Client = new google.auth.OAuth2(
-      process.env.GOOGLE_CLIENT_ID,
-      process.env.GOOGLE_CLIENT_SECRET,
-      process.env.GOOGLE_REDIRECT_URI
-    );
+  // constructor를 private으로 변경하여 외부에서 new로 생성하는 것을 막습니다.
+  private constructor() {
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    const redirectUri = process.env.GOOGLE_REDIRECT_URI;
+
+    this.oauth2Client = new OAuth2Client({
+      clientId: clientId,
+      clientSecret: clientSecret,
+      redirectUri: redirectUri
+    });
+  }
+
+  // 인스턴스를 얻는 유일한 방법인 getInstance 메소드를 제공합니다.
+  public static getInstance(): AuthenticationService {
+    if (!AuthenticationService.instance) {
+      AuthenticationService.instance = new AuthenticationService();
+    }
+    return AuthenticationService.instance;
   }
 
   /**
@@ -24,7 +38,8 @@ export class AuthenticationService {
       'https://www.googleapis.com/auth/userinfo.email',
       'https://www.googleapis.com/auth/spreadsheets',
       'https://www.googleapis.com/auth/forms.body',
-      'https://www.googleapis.com/auth/gmail.send'
+      'https://www.googleapis.com/auth/gmail.send', // Gmail 발송 권한
+      'https://www.googleapis.com/auth/gmail.metadata' // Gmail 프로필 정보 읽기 권한 추가
     ];
 
     const authUrl = this.oauth2Client.generateAuthUrl({
@@ -45,14 +60,14 @@ export class AuthenticationService {
       const { tokens } = await this.oauth2Client.getToken(code);
       this.oauth2Client.setCredentials(tokens);
 
-      // Get user profile from Google
-      const oauth2 = google.oauth2({ version: 'v2', auth: this.oauth2Client });
-      const { data } = await oauth2.userinfo.get();
+      // Get user profile from Google using the auth client
+      const ticket = await this.oauth2Client.verifyIdToken({ idToken: tokens.id_token!, audience: process.env.GOOGLE_CLIENT_ID });
+      const payload = ticket.getPayload();
 
       const googleProfile: GoogleProfile = {
-        id: data.id!,
-        displayName: data.name!,
-        emails: [{ value: data.email!, verified: data.verified_email! }]
+        id: payload!.sub,
+        displayName: payload!.name!,
+        emails: [{ value: payload!.email!, verified: payload!.email_verified! }]
       };
 
       // Check if user exists
@@ -91,7 +106,8 @@ export class AuthenticationService {
     const email = googleProfile.emails[0].value;
 
     // Create Google Sheets for event management
-    const sheetsService = new GoogleSheetsService(this.oauth2Client);
+    const sheetsService = GoogleSheetsService.getInstance();
+    sheetsService.setOAuth2Client(this.oauth2Client);
     const eventSheetId = await sheetsService.createEventSheet(userId, googleProfile.displayName);
 
     const user: User = {

@@ -4,12 +4,22 @@ import { Event } from '../models/Event';
 import { Attendee, AttendanceStatus } from '../models/Attendee';
 
 export class GoogleSheetsService {
-  private sheets: sheets_v4.Sheets;
-  private oauth2Client: OAuth2Client;
+  private static instance: GoogleSheetsService;
+  private sheets: sheets_v4.Sheets | null = null;
+  private oauth2Client: OAuth2Client | null = null;
 
-  constructor(oauth2Client: OAuth2Client) {
+  private constructor() {}
+
+  public static getInstance(): GoogleSheetsService {
+    if (!GoogleSheetsService.instance) {
+      GoogleSheetsService.instance = new GoogleSheetsService();
+    }
+    return GoogleSheetsService.instance;
+  }
+
+  public setOAuth2Client(oauth2Client: OAuth2Client) {
     this.oauth2Client = oauth2Client;
-    this.sheets = google.sheets({ version: 'v4', auth: oauth2Client });
+    this.sheets = google.sheets({ version: 'v4', auth: this.oauth2Client });
   }
 
   /**
@@ -19,6 +29,10 @@ export class GoogleSheetsService {
    */
   async createEventSheet(userId: string, userName: string): Promise<string> {
     try {
+      if (!this.sheets) {
+        throw new Error('GoogleSheetsService is not initialized. Call setOAuth2Client first.');
+      }
+
       // Create new spreadsheet
       const spreadsheet = await this.sheets.spreadsheets.create({
         requestBody: {
@@ -47,6 +61,14 @@ export class GoogleSheetsService {
       });
 
       const sheetId = spreadsheet.data.spreadsheetId!;
+
+      // Get the actual sheet IDs from the response instead of hardcoding 0 and 1
+      const eventsSheetId = spreadsheet.data.sheets?.[0]?.properties?.sheetId;
+      const attendeesSheetId = spreadsheet.data.sheets?.[1]?.properties?.sheetId;
+
+      if (eventsSheetId === undefined || attendeesSheetId === undefined) {
+        throw new Error('Failed to retrieve sheet IDs from newly created spreadsheet.');
+      }
 
       // Initialize Events tab with headers
       await this.sheets.spreadsheets.values.update({
@@ -94,7 +116,7 @@ export class GoogleSheetsService {
             {
               repeatCell: {
                 range: {
-                  sheetId: 0, // Events sheet
+                  sheetId: eventsSheetId, // Use dynamic sheet ID
                   startRowIndex: 0,
                   endRowIndex: 1
                 },
@@ -111,7 +133,7 @@ export class GoogleSheetsService {
             {
               repeatCell: {
                 range: {
-                  sheetId: 1, // Attendees sheet
+                  sheetId: attendeesSheetId, // Use dynamic sheet ID
                   startRowIndex: 0,
                   endRowIndex: 1
                 },
@@ -142,6 +164,10 @@ export class GoogleSheetsService {
    */
   async storeEvent(sheetId: string, event: Event): Promise<void> {
     try {
+      if (!this.sheets) {
+        throw new Error('GoogleSheetsService is not initialized. Call setOAuth2Client first.');
+      }
+
       const values = [[
         event.id,
         event.name,
@@ -175,7 +201,11 @@ export class GoogleSheetsService {
    */
   async storeAttendees(sheetId: string, eventId: string, attendees: Attendee[]): Promise<void> {
     try {
-      if (attendees.length === 0) {
+      if (!this.sheets) {
+        throw new Error('GoogleSheetsService is not initialized. Call setOAuth2Client first.');
+      }
+
+      if (!attendees || attendees.length === 0) {
         return;
       }
 
@@ -208,8 +238,18 @@ export class GoogleSheetsService {
   /**
    * Update attendance status in Google Sheets
    */
-  async updateAttendanceStatus(sheetId: string, attendeeId: string, status: AttendanceStatus): Promise<void> {
+  async updateAttendanceStatus(
+    sheetId: string,
+    attendeeId: string,
+    status: AttendanceStatus,
+    name?: string,
+    responseDate?: Date
+  ): Promise<void> {
     try {
+      if (!this.sheets) {
+        throw new Error('GoogleSheetsService is not initialized. Call setOAuth2Client first.');
+      }
+
       // Get all attendees to find the row
       const response = await this.sheets.spreadsheets.values.get({
         spreadsheetId: sheetId,
@@ -234,13 +274,21 @@ export class GoogleSheetsService {
         throw new Error(`Attendee ${attendeeId} not found in sheet`);
       }
 
-      // Update status (column E) and response date (column F)
+      // Prepare values to update
+      const currentName = rows[rowIndex - 1][3]; // Get current name from sheet
+      const valuesToUpdate = [
+        name || currentName, // Update name if provided, otherwise keep current
+        status,
+        responseDate ? responseDate.toISOString() : new Date().toISOString()
+      ];
+
+      // Update name (column D), status (column E), and response date (column F)
       await this.sheets.spreadsheets.values.update({
         spreadsheetId: sheetId,
-        range: `Attendees!E${rowIndex}:F${rowIndex}`,
+        range: `Attendees!D${rowIndex}:F${rowIndex}`,
         valueInputOption: 'RAW',
         requestBody: {
-          values: [[status, new Date().toISOString()]]
+          values: [valuesToUpdate]
         }
       });
 
@@ -257,6 +305,10 @@ export class GoogleSheetsService {
    */
   async readAttendeesFromSheet(sheetUrl: string): Promise<string[]> {
     try {
+      if (!this.sheets) {
+        throw new Error('GoogleSheetsService is not initialized. Call setOAuth2Client first.');
+      }
+
       // Extract sheet ID from URL
       const sheetId = this.extractSheetIdFromUrl(sheetUrl);
       if (!sheetId) {

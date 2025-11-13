@@ -10,12 +10,22 @@ export interface EmailResult {
 }
 
 export class EmailService {
-  private gmail: gmail_v1.Gmail;
-  private oauth2Client: OAuth2Client;
+  private static instance: EmailService;
+  private gmail: gmail_v1.Gmail | null = null;
+  private oauth2Client: OAuth2Client | null = null;
 
-  constructor(oauth2Client: OAuth2Client) {
+  private constructor() {}
+
+  public static getInstance(): EmailService {
+    if (!EmailService.instance) {
+      EmailService.instance = new EmailService();
+    }
+    return EmailService.instance;
+  }
+
+  public setOAuth2Client(oauth2Client: OAuth2Client) {
     this.oauth2Client = oauth2Client;
-    this.gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+    this.gmail = google.gmail({ version: 'v1', auth: this.oauth2Client });
   }
 
   /**
@@ -217,15 +227,22 @@ export class EmailService {
    */
   private async sendEmail(to: string, subject: string, htmlContent: string): Promise<void> {
     try {
+      if (!this.gmail) {
+        throw new Error('EmailService is not initialized. Call setOAuth2Client first.');
+      }
+
       // Get sender email from OAuth2 credentials
       const userInfo = await this.gmail.users.getProfile({ userId: 'me' });
       const fromEmail = userInfo.data.emailAddress;
+
+      // RFC 2047에 따라 한글 제목을 인코딩합니다.
+      const encodedSubject = `=?UTF-8?B?${Buffer.from(subject).toString('base64')}?=`;
 
       // Create email message in RFC 2822 format
       const message = [
         `From: ${fromEmail}`,
         `To: ${to}`,
-        `Subject: ${subject}`,
+        `Subject: ${encodedSubject}`,
         'MIME-Version: 1.0',
         'Content-Type: text/html; charset=utf-8',
         '',

@@ -17,21 +17,8 @@ export default function AttendeeList({
     null
   );
 
-  // Set up polling for real-time updates
-  useEffect(() => {
-    // Poll every 10 seconds for attendance status updates
-    const interval = setInterval(() => {
-      onRefresh();
-    }, 10000);
-
-    setPollingInterval(interval);
-
-    return () => {
-      if (interval) {
-        clearInterval(interval);
-      }
-    };
-  }, [eventId, onRefresh]);
+  // Set up polling for real-time updates - 주석 처리하여 비활성화
+  // useEffect(() => { ... });
 
   const getStatusText = (status: AttendanceStatus): string => {
     switch (status) {
